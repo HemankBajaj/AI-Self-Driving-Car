@@ -1,5 +1,5 @@
 import util 
-from util import Belief, pdf, xToCol, yToRow 
+from util import Belief, pdf, xToCol, yToRow, rowToY, colToX 
 from engine.const import Const
 import random
 import math
@@ -52,7 +52,7 @@ class Estimator(object):
             return
         total_particles = 1000
         positions = [(0, 0) for i in range(total_particles)]
-        # positions stores position of ith particle (x : row, y : column)
+
         current_particle = 0
         tupleWiseProbs = {}
         for quadruple in self.transProb:
@@ -71,7 +71,6 @@ class Estimator(object):
                         break
         for i in range(current_particle, total_particles):
             positions[i] = (random.randint(0, self.belief.getNumRows()-1), random.randint(0, self.belief.getNumCols()-1))
-        self.printgrid(positions)
         for i in range(total_particles):
             if positions[i] not in tupleWiseProbs:
                 continue
@@ -82,14 +81,12 @@ class Estimator(object):
                     break
                 else:
                     val -= tupleWiseProbs[positions[i]][position]
-        self.printgrid(positions)
         positional_sum = {}
         for i in range(total_particles):
-            # print(pdf(math.sqrt((yToRow(posY)-positions[i][0])**2 + (xToCol(posX)-positions[i][1])**2), Const.SONAR_STD, observedDist))
             if positions[i] in positional_sum:
-                positional_sum[positions[i]] += pdf(math.sqrt((yToRow(posY)-positions[i][0])**2 + (xToCol(posX)-positions[i][1])**2), 5*Const.SONAR_STD, observedDist)
+                positional_sum[positions[i]] += pdf(math.sqrt((posY-rowToY(positions[i][0]))**2 + (posX-colToX(positions[i][1]))**2), Const.SONAR_STD, observedDist)
             else :
-                positional_sum[positions[i]] = pdf(math.sqrt((yToRow(posY)-positions[i][0])**2 + (xToCol(posX)-positions[i][1])**2), 5*Const.SONAR_STD, observedDist)
+                positional_sum[positions[i]] = pdf(math.sqrt((posY-rowToY(positions[i][0]))**2 + (posX-colToX(positions[i][1]))**2), Const.SONAR_STD, observedDist)
 
         for i in range(belief.getNumRows()):
             for j in range(belief.getNumCols()):
@@ -98,7 +95,6 @@ class Estimator(object):
                 else :
                     self.belief.setProb(i, j, 0)
         self.belief.normalize()
-        print(self.belief.grid)
         return
 
     def getBelief(self) -> Belief:
