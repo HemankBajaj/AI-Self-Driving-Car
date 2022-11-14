@@ -130,7 +130,12 @@ class IntelligentDriver(Junior):
         # print("currpos", currPos)
         # nextGoal = self.checkPoints[chkPtsSoFar]
         MIN_PROB = 0.08
-
+        def getProbCar(row, col):
+            p = 0
+            for belief in beliefOfOtherCars:
+                p += belief.getProb(row, col)
+            return p
+        
         def euclideanDistance(x1, y1, x2, y2):
             return math.sqrt((x1-x2)**2 + (y1-y2)**2)
 
@@ -138,6 +143,47 @@ class IntelligentDriver(Junior):
             return abs(x1-x2) + abs(y1-y2)
         numRows, numCols = self.layout.getBeliefRows(), self.layout.getBeliefCols()
 
+        worldGrid = []
+        for i in range(numRows):
+            l = []
+            for j in range(numCols):
+                if (i, j) in self.worldGraph.blocks:
+                    l.append(1)
+                else:
+                    l.append(0)
+            worldGrid.append(l)
+        # ## Now filling the positions of the cars
+        for i in range(numRows):
+            for j in range(numCols):
+                if getProbCar(i, j) >= 0.1: ## Expected Number of cars
+                    worldGrid[i][j] = 1
+            print(worldGrid[i])
+        
+        def isGrid(i, j):
+            return i >= 0 and i < numRows and j < numCols and j >= 0
+        def bfsDistance(src , dest):
+            vis = [[False for j in range(numCols)] for i in range(numRows)]
+            dr = [-1, 0, +1, 0, -1, +1, +1, -1]
+            dc = [0, +1, 0, -1, -1, -1, +1, +1]
+            q = [src]; vis[src[0]][src[1]] = True
+            dist = 0
+            while len(q) > 0:
+                sz = len(q)
+                while sz > 0:
+                    node = q.pop(0)
+                    r = node[0]; c = node[1]
+                    if (r, c) == dest:
+                        return dist  
+                    ## If not the destination then check the 8 nbrs
+                    for i in range(len(dr)):
+                        r_ = r + dr[i] ; c_ = c + dc[i] 
+                        if isGrid(r_, c_) and not vis[r_][c_] and worldGrid[r_][c_] != 1:
+                            q.append((r_, c_))
+                            vis[r_][c_] = True 
+                    sz -= 1
+                    # print(sz)
+                dist += 1
+            return -1
         print("RC->", self.layout.getBeliefRows(), self.layout.getBeliefCols())
         dxList = [-1, 0, +1]
         dyList = [-1, 0, +1]
@@ -183,11 +229,7 @@ class IntelligentDriver(Junior):
             if (row, col) not in self.worldGraph.nodes:
                 return True
             return False
-        def getProbCar(row, col):
-            p = 0
-            for belief in beliefOfOtherCars:
-                p += belief.getProb(row, col)
-            return p
+        
         def numberOfBlocksInvicinity(row, col):
             cnt = 0
             for dx in dxList:
@@ -198,120 +240,120 @@ class IntelligentDriver(Junior):
                         cnt += 1
             return cnt 
 
-
+        nextGoal = self.checkPoints[chkPtsSoFar]
         ## Adding padding to the blocks so they cover the boundaries as well 
         for i in range(numRows):
-            self.worldGraph.blocks.append((i, 0))
-            self.worldGraph.blocks.append((i, numCols-1))
+            if nextGoal[1] != 0:
+                worldGrid[i][0] = 1
+            if nextGoal[1] != numCols-1:
+                worldGrid[i][numCols-1] = 1
 
         for j in range(numCols):
-            self.worldGraph.blocks.append((0, j))
-            self.worldGraph.blocks.append((numRows-1, j))
+            if nextGoal[0] != 0:
+                worldGrid[0][j] = 1
+            if nextGoal[0] != numRows-1:
+                worldGrid[numRows-1][j] = 1
         
-        nextGoal = self.checkPoints[chkPtsSoFar]
+        
         x0 = currPos[0]; x1 = currPos[1]
         
         currNode = (util.yToRow(x1), util.xToCol(x0) )
 
-        minDist = 1e9  # set to inf
-        print("Curr", currNode)
+        ## Alt Impl begins 
+        minDist = 1e9 
         goalNode = None 
-        for dx in dxList:
-            for dy in dyList:
-                if dx != 0 or dy != 0:
-                    x = currPos[0] + dx*1.5*Car.LENGTH 
-                    y = currPos[1] + dy*1.5*Car.LENGTH 
-                    row = util.yToRow(y); col = util.xToCol(x)
-                    if (row , col) in self.worldGraph.nodes and row < numRows and col < numCols:
-                        dist =  manhattanDistance(row, col, nextGoal[0], nextGoal[1])
-                        print("ROW->", row, "COL->", col)
+        dr = [-1, 0, +1, 0, -1, +1, -1, +1]
+        dc = [0, -1, 0, +1, -1, +1, +1, -1]
+        goals = []
+        for i in range(len(dr)):
+            r = currNode[0] + dr[i]
+            c = currNode[1] + dc[i] 
+            if isGrid(r, c) and worldGrid[r][c] != 1:
+                dist = bfsDistance((r, c) , nextGoal)
+                if dist < minDist and dist != -1: #and numberOfBlocksInvicinity(r,c) <= 3:
+                    minDist = dist 
+        for i in range(len(dr)):
+            r = currNode[0] + dr[i]
+            c = currNode[1] + dc[i] 
+            if isGrid(r, c) and  worldGrid[r][c] != 1 and bfsDistance((r, c), nextGoal) == minDist:
+                goals.append((r, c))
+        if len(goals) > 0:
+            goalNode = random.choice(goals)
+        if len(goals) == 0:
+            moveForward = False
+        else :
+            goalPos = (util.colToX(goalNode[1]), util.rowToY(goalNode[0]))
+        ## Alt Impl Ends
 
-                        ## Check this condn
-                        if row < numRows-1 and col < numCols-1 and not isCarInVicinity(row, col) and not isBlockInVicinity(x, y): # less than 5% chance that a car is there
-                            if dist <= minDist:
-                                goalNode = (row, col)
-                                minDist = dist 
+        # minDist = 1e9  # set to inf
+        # print("Curr", currNode)
+        # goalNode = None 
+        # for dx in dxList:
+        #     for dy in dyList:
+        #         if dx != 0 or dy != 0:
+        #             x = currPos[0] + dx*1.5*Car.LENGTH 
+        #             y = currPos[1] + dy*1.5*Car.LENGTH 
+        #             row = util.yToRow(y); col = util.xToCol(x)
+        #             if (row , col) in self.worldGraph.nodes and row < numRows and col < numCols:
+        #                 dist =  bfsDistance((row, col), (nextGoal[0], nextGoal[1]))
+        #                 print("ROW->", row, "COL->", col)
+
+        #                 ## Check this condn
+        #                 if row < numRows-1 and col < numCols-1 and not isCarInVicinity(row, col) and not isBlockInVicinity(x, y): # less than 5% chance that a car is there
+        #                     if dist <= minDist:
+        #                         goalNode = (row, col)
+        #                         minDist = dist 
 
         
-        if goalNode == None:
-            print("Goal Node not Decided")
-            cond = currNode[0] > 0 and currNode[1] > 1 and currNode[0] < numRows - 1 and currNode[1] < numCols - 1
-            if cond and isCarInVicinity(currNode[0], currNode[1]):
-                print("Car in Vicinity")
-                minProb = len(beliefOfOtherCars)
-                for dx in dxList:
-                    for dy in dyList:
-                        tempX = currPos[0] + dx*1.5*Car.LENGTH
-                        tempY = currPos[1] + dy*1.5*Car.LENGTH
-                        tempNode = ( util.yToRow(tempY),util.xToCol(tempX) )
-                        condn = tempNode[0] < numRows -1 and tempNode[1] < numCols-1 and tempNode[0] >= 1 and tempNode[1] >=1
-                        if condn and tempNode in self.worldGraph.nodes and  minProb > getProbCar(tempNode[0], tempNode[1]) and not isBlockCell(tempNode[0], tempNode[1]):
-                            minProb = getProbCar(tempNode[0], tempNode[1])
-                            goalPos = (tempX, tempY)
-                            moveForward = True
-            else: ## This needs to be made better
-                print("Block in vicinity not Car")
-                cntBlk = 10 
-                minProb = 1 
-                minDist = 1e9
-                minTH  = cntBlk # *(1+minProb)
-                for dx in dxList:
-                    for dy in dyList:
-                        row = currNode[0]+dx
-                        col = currNode[1]+dy
-                        condn = row >= 1 and col >= 1  and row < numCols-1 and col  < numCols-1 
-                        if condn:
-                            prob = getProbCar(row, col)
-                            cnt = numberOfBlocksInvicinity(row, col)  
-                            dist = manhattanDistance(row, col, nextGoal[0], nextGoal[1])
-                            print("Block Count", cnt, "DX DY ", dx, dy)
+        # if goalNode == None:
+        #     print("Goal Node not Decided")
+        #     cond = currNode[0] > 0 and currNode[1] > 1 and currNode[0] < numRows - 1 and currNode[1] < numCols - 1
+        #     if cond and isCarInVicinity(currNode[0], currNode[1]):
+        #         print("Car in Vicinity")
+        #         minProb = len(beliefOfOtherCars)
+        #         for dx in dxList:
+        #             for dy in dyList:
+        #                 tempX = currPos[0] + dx*1.5*Car.LENGTH
+        #                 tempY = currPos[1] + dy*1.5*Car.LENGTH
+        #                 tempNode = ( util.yToRow(tempY),util.xToCol(tempX) )
+        #                 condn = tempNode[0] < numRows -1 and tempNode[1] < numCols-1 and tempNode[0] >= 1 and tempNode[1] >=1
+        #                 if condn and tempNode in self.worldGraph.nodes and  minProb > getProbCar(tempNode[0], tempNode[1]) and not isBlockCell(tempNode[0], tempNode[1]):
+        #                     minProb = getProbCar(tempNode[0], tempNode[1])
+        #                     goalPos = (tempX, tempY)
+        #                     moveForward = True
+        #     else: ## This needs to be made better
+        #         print("Block in vicinity not Car")
+        #         cntBlk = 10 
+        #         minProb = 1 
+        #         minDist = 1e9
+        #         minTH  = cntBlk # *(1+minProb)
+        #         for dx in dxList:
+        #             for dy in dyList:
+        #                 row = currNode[0]+dx
+        #                 col = currNode[1]+dy
+        #                 condn = row >= 1 and col >= 1  and row < numCols-1 and col  < numCols-1 
+        #                 if condn:
+        #                     prob = getProbCar(row, col)
+        #                     cnt = numberOfBlocksInvicinity(row, col)  
+        #                     dist = bfsDistance((row, col), (nextGoal[0], nextGoal[1]))
+        #                     print("Block Count", cnt, "DX DY ", dx, dy)
                             
-                            change = (dx != 0) or (dy != 0)              
-                            print(condn, (row, col) in self.worldGraph.nodes, not isBlockCell(row, col))
-                            if condn  and (row, col) in self.worldGraph.nodes and not (row, col) in self.worldGraph.blocks: #and not getProbCar(row, col) < MIN_PROB*len(beliefOfOtherCars):
-                                    if (cnt < minTH) or (cnt == minTH and (minDist >= dist)):
-                                        minTH = cnt 
-                                        minDist = dist 
-                                        goalNode = (row, col)
-                                        goalPos = (util.colToX(col), util.rowToY(row))
-                                        moveForward = True                            
-                if goalNode == None:
-                    print("Goal still not decided")
-                    moveForward = False 
-        else:
-            goalPos = (util.colToX(goalNode[1]), util.rowToY(goalNode[0]))
-
-        worldGrid = []
-        for i in range(numRows):
-            l = []
-            for j in range(numCols):
-                if (i, j) in self.worldGraph.blocks:
-                    l.append(1)
-                else:
-                    l.append(0)
-            worldGrid.append(l)
-        ## Now filling the positions of the cars
-        for i in range(numRows):
-            for j in range(numCols):
-                if getProbCar(i, j) >= MIN_PROB*len(beliefOfOtherCars): ## Possibility of car in a region
-                    worldGrid[i][j] = 1
-
-        # def findPath(src , dest):
-        #     vis = [[False for j in range(numCols)] for i in range(numRows)]
-        #     dr_ = [-1, 0, +1]
-        #     dc_ = [-1, 0, +1]
-        #     q = [src]; vis[src[0]][src[1]] = True
-        #     path = 
-        #     while len(q) > 0:
-        #         node = q.pop(0)
-        #         r = node[0]; c = node[1]
-        #         for dr in dr_:
-        #             for dc in dc_:
-        #                 r_ = r + dr 
-        #                 c_ = c + dc 
-        #                 if (r_, c_) == dest:
-        #                     return path
-        #     return []
+        #                     change = (dx != 0) or (dy != 0)              
+        #                     print(condn, (row, col) in self.worldGraph.nodes, not isBlockCell(row, col))
+        #                     if condn  and (row, col) in self.worldGraph.nodes and not (row, col) in self.worldGraph.blocks: #and not getProbCar(row, col) < MIN_PROB*len(beliefOfOtherCars):
+        #                             if (cnt < minTH) or (cnt == minTH and (minDist >= dist)):
+        #                                 minTH = cnt 
+        #                                 minDist = dist 
+        #                                 goalNode = (row, col)
+        #                                 goalPos = (util.colToX(col), util.rowToY(row))
+        #                                 moveForward = True                            
+        #         if goalNode == None:
+        #             print("Goal still not decided")
+        #             moveForward = False 
+        # else:
+        #     goalPos = (util.colToX(goalNode[1]), util.rowToY(goalNode[0]))
+        print("Now performing bfs")
+        print("BFS DISTANCE" , bfsDistance(currNode, nextGoal))
         # END_YOUR_CODE
         return goalPos, moveForward
 
