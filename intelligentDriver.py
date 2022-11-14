@@ -154,7 +154,18 @@ class IntelligentDriver(Junior):
                 else:
                     l.append(0)
             worldGrid.append(l)
-        
+        ## Adding padding to the blocks so they cover the boundaries as well 
+        for i in range(numRows):
+            if nextGoal[1] != 0:
+                worldGrid[i][0] = 1
+            if nextGoal[1] != numCols-1:
+                worldGrid[i][numCols-1] = 1
+
+        for j in range(numCols):
+            if nextGoal[0] != 0:
+                worldGrid[0][j] = 1
+            if nextGoal[0] != numRows-1:
+                worldGrid[numRows-1][j] = 1
         # ## Now filling the positions of the cars
         for i in range(numRows):
             for j in range(numCols):
@@ -227,11 +238,11 @@ class IntelligentDriver(Junior):
 
         def isBlock(x, y):
             row = util.yToRow(y); col = util.xToCol(x)
-            if (row, col) not in self.worldGraph.nodes:
+            if worldGrid[row][col] == 1:
                 return True
             return False
         def isBlockCell(row, col):
-            if (row, col) not in self.worldGraph.nodes:
+            if worldGrid[row][col] == 1:
                 return True
             return False
         
@@ -241,23 +252,12 @@ class IntelligentDriver(Junior):
                 for dy in dyList:
                     x = row + dx 
                     y = col + dy  
-                    if (x, y) not in self.worldGraph.nodes:
+                    if worldGrid[row][col] == 1:
                         cnt += 1
             return cnt 
 
         
-        ## Adding padding to the blocks so they cover the boundaries as well 
-        for i in range(numRows):
-            if nextGoal[1] != 0:
-                worldGrid[i][0] = 1
-            if nextGoal[1] != numCols-1:
-                worldGrid[i][numCols-1] = 1
-
-        for j in range(numCols):
-            if nextGoal[0] != 0:
-                worldGrid[0][j] = 1
-            if nextGoal[0] != numRows-1:
-                worldGrid[numRows-1][j] = 1
+        
         
     
 
@@ -274,7 +274,7 @@ class IntelligentDriver(Junior):
             y = currPos[1] + dr[i]*1.5*Car.LENGTH
             if isGrid(r, c) and worldGrid[r][c] != 1 and not isBlock(x, y):
                 dist = bfsDistance((r, c) , nextGoal)
-                if dist < minDist and dist != -1: # and numberOfBlocksInvicinity(r,c) <= 3:
+                if  dist != -1 and dist < minDist:  # and numberOfBlocksInvicinity(r,c) <= 3:
                     minDist = dist 
         for i in range(len(dr)):
             r = currNode[0] + dr[i]
@@ -282,17 +282,24 @@ class IntelligentDriver(Junior):
             if isGrid(r, c) and  worldGrid[r][c] != 1 and bfsDistance((r, c), nextGoal) == minDist:
                 goals.append((r, c))
         if len(goals) > 0:
-            goalNode = random.choice(goals)
+            ## Move to the one with least number of blocks in vicinity
+            cntMin = 10
+            for node in goals:
+                cnt = numberOfBlocksInvicinity(node[0], node[1])
+                if cnt < cntMin:
+                    cntMin = cnt
+                    goalNode = node
+            # goalNode = random.choice(goals)
         if len(goals) == 0: ## this means that bfs dist == -1 i.e. no path
             ## we can move to a block with least expected cars in this case 
             ## also away from blocks i.e. 
-            # minExp = len(beliefOfOtherCars)
-            # for i  in range(len(dr)):
-            #     r = currNode[0] + dr[i]
-            #     c = currNode[1] + dc[i] 
-            #     if numberOfBlocksInvicinity(r, c) <= 3 and getProbCar(r, c) < minExp:
-            #         minExp = getProbCar(r, c)
-            #         goalNode = (r, c)
+            minExp = len(beliefOfOtherCars)
+            for i  in range(len(dr)):
+                r = currNode[0] + dr[i]
+                c = currNode[1] + dc[i] 
+                if isGrid(r, c) and numberOfBlocksInvicinity(r, c) <= 4 and getProbCar(r, c) < minExp and minExp < 0.2:
+                    minExp = getProbCar(r, c)
+                    goalNode = (r, c)
             if goalNode == None:
                 moveForward = False
         else :
