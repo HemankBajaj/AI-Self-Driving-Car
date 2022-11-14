@@ -141,8 +141,10 @@ class IntelligentDriver(Junior):
 
         def manhattanDistance(x1, y1, x2, y2):
             return abs(x1-x2) + abs(y1-y2)
+        x0 = currPos[0]; x1 = currPos[1]
+        currNode = (util.yToRow(x1), util.xToCol(x0) )
         numRows, numCols = self.layout.getBeliefRows(), self.layout.getBeliefCols()
-
+        nextGoal = self.checkPoints[chkPtsSoFar]
         worldGrid = []
         for i in range(numRows):
             l = []
@@ -152,11 +154,14 @@ class IntelligentDriver(Junior):
                 else:
                     l.append(0)
             worldGrid.append(l)
+        
         # ## Now filling the positions of the cars
         for i in range(numRows):
             for j in range(numCols):
-                if getProbCar(i, j) >= 0.1: ## Expected Number of cars
+                if getProbCar(i, j) >= 0.05: ## Expected Number of cars
                     worldGrid[i][j] = 1
+            worldGrid[nextGoal[0]][nextGoal[1]] = "*"
+            worldGrid[currNode[0]][currNode[1] ] = "C"
             print(worldGrid[i])
         
         def isGrid(i, j):
@@ -240,7 +245,7 @@ class IntelligentDriver(Junior):
                         cnt += 1
             return cnt 
 
-        nextGoal = self.checkPoints[chkPtsSoFar]
+        
         ## Adding padding to the blocks so they cover the boundaries as well 
         for i in range(numRows):
             if nextGoal[1] != 0:
@@ -254,10 +259,7 @@ class IntelligentDriver(Junior):
             if nextGoal[0] != numRows-1:
                 worldGrid[numRows-1][j] = 1
         
-        
-        x0 = currPos[0]; x1 = currPos[1]
-        
-        currNode = (util.yToRow(x1), util.xToCol(x0) )
+    
 
         ## Alt Impl begins 
         minDist = 1e9 
@@ -268,9 +270,11 @@ class IntelligentDriver(Junior):
         for i in range(len(dr)):
             r = currNode[0] + dr[i]
             c = currNode[1] + dc[i] 
-            if isGrid(r, c) and worldGrid[r][c] != 1:
+            x = currPos[0] + dc[i]*1.5*Car.LENGTH
+            y = currPos[1] + dr[i]*1.5*Car.LENGTH
+            if isGrid(r, c) and worldGrid[r][c] != 1 and not isBlock(x, y):
                 dist = bfsDistance((r, c) , nextGoal)
-                if dist < minDist and dist != -1: #and numberOfBlocksInvicinity(r,c) <= 3:
+                if dist < minDist and dist != -1: # and numberOfBlocksInvicinity(r,c) <= 3:
                     minDist = dist 
         for i in range(len(dr)):
             r = currNode[0] + dr[i]
@@ -279,8 +283,18 @@ class IntelligentDriver(Junior):
                 goals.append((r, c))
         if len(goals) > 0:
             goalNode = random.choice(goals)
-        if len(goals) == 0:
-            moveForward = False
+        if len(goals) == 0: ## this means that bfs dist == -1 i.e. no path
+            ## we can move to a block with least expected cars in this case 
+            ## also away from blocks i.e. 
+            # minExp = len(beliefOfOtherCars)
+            # for i  in range(len(dr)):
+            #     r = currNode[0] + dr[i]
+            #     c = currNode[1] + dc[i] 
+            #     if numberOfBlocksInvicinity(r, c) <= 3 and getProbCar(r, c) < minExp:
+            #         minExp = getProbCar(r, c)
+            #         goalNode = (r, c)
+            if goalNode == None:
+                moveForward = False
         else :
             goalPos = (util.colToX(goalNode[1]), util.rowToY(goalNode[0]))
         ## Alt Impl Ends
@@ -378,4 +392,12 @@ class IntelligentDriver(Junior):
         return actions
     
     
+## To Do 
+## 1. Padding rules need to be changed. 
+## IF a goal near a block at end rows columns 
+## then we need to remove padding of 3-4 adjacent cells so that a path can be found
+## 2. Make it work for lombard for more than 5 cars
 
+## Issues 
+# 1. lombard more than 5 carss, it crashes 
+# 2. resolve the issue if car in vicinity then move away 
